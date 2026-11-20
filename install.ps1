@@ -12,7 +12,7 @@ Write-Host ""
 
 $installDir = "$env:LOCALAPPDATA\TheSuperMouse"
 $zipPath = "$env:TEMP\TheSuperMouse_Full.zip"
-$downloadUrl = "https://raw.githubusercontent.com/getsupermouse/thesupermouse-releases/main/updates/TheSuperMouse_Full.zip"
+$downloadUrl = "https://raw.githubusercontent.com/getsupermouse/supermousenewnupdates/main/updates/TheSuperMouse_Full.zip"
 
 Write-Host "  [*] Downloading THE SUPER MOUSE from GitHub..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
