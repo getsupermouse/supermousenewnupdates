@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "name": "THE SUPERMOUSE 1.0",
+  "headline": "THE SUPERMOUSE 1.0 (LATEST)",
+  "subtext": "You are running the latest official Version 1.0 release.",
+  "date": "20 Nov 2026",
+  "size_mb": "0.0 MB",
+  "total_size_mb": 0.0,
+  "parts": [],
+  "download_url": "",
+  "patch_url": "",
+  "patch_sha256": "",
+  "patch_size_mb": "0.0 MB",
+  "updates": [],
+  "replace": []
+}
