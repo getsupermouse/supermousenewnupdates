@@ -1,4 +1,4 @@
-# THE SUPER MOUSE — 1-Command Windows Setup
+﻿# THE SUPER MOUSE — 1-Command Windows Setup
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -78,8 +78,7 @@ if (Test-Path "$installDir\TheSuperMouse") {
 $zipPath = "$env:TEMP\TheSuperMouse_Full.zip"
 $downloadCandidates = @(
     "https://github.com/getsupermouse/supermouse-newmodes/releases/download/v1.01/TheSuperMouse_Full.zip",
-    "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.01/TheSuperMouse_Full.zip",
-    "https://github.com/getsupermouse/thesupermouse-releases/releases/download/v1.01/TheSuperMouse_Full.zip"
+    "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.01/TheSuperMouse_Full.zip"
 )
 
 Write-Host ""
@@ -91,7 +90,7 @@ foreach ($targetUrl in $downloadCandidates) {
     try {
         $req = [System.Net.HttpWebRequest]::Create($targetUrl)
         $req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TheSuperMouseInstaller"
-        $req.Timeout = 15000
+        $req.Timeout = 20000
         $req.AllowAutoRedirect = $true
         $resp = $req.GetResponse()
         $totalBytes = $resp.ContentLength
@@ -129,10 +128,9 @@ foreach ($targetUrl in $downloadCandidates) {
             break
         }
     } catch {
-        # Fallback to Invoke-WebRequest for this candidate
         try {
-            Write-Host "  [*] Mirror failover, trying fallback connection..." -ForegroundColor Yellow
-            Invoke-WebRequest -Uri $targetUrl -OutFile $zipPath -UserAgent "SuperMouseInstaller" -UseBasicParsing -TimeoutSec 30
+            Write-Host "  [*] Failover connecting to secondary mirror..." -ForegroundColor Yellow
+            Invoke-WebRequest -Uri $targetUrl -OutFile $zipPath -UserAgent "SuperMouseInstaller" -UseBasicParsing -TimeoutSec 35
             if ((Test-Path $zipPath) -and ((Get-Item $zipPath).Length -gt 10000000)) {
                 $downloadSuccess = $true
                 Write-Host "  [+] Package download verified!" -ForegroundColor Green
@@ -144,7 +142,7 @@ foreach ($targetUrl in $downloadCandidates) {
 
 if (-not $downloadSuccess) {
     Write-Host "  [ERROR] Could not download package from any cloud mirror." -ForegroundColor Red
-    Write-Host "          Please check your internet connection or firewall." -ForegroundColor Yellow
+    Write-Host "          Please check your internet connection." -ForegroundColor Yellow
     exit 1
 }
 
@@ -176,100 +174,75 @@ $binDir = "$installDir\bin"
 New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
 # delete.cmd
-$deleteCmd = @"
-@echo off
-if /I "%~1"=="supermouse" (
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\TheSuperMouse\bin\delete_supermouse.ps1"
-    exit /b %errorlevel%
+$cmdLines = @(
+    '@echo off',
+    'if /I "%~1"=="supermouse" (',
+    '    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\TheSuperMouse\bin\delete_supermouse.ps1"',
+    '    exit /b %errorlevel%',
+    ')',
+    'echo Usage: delete supermouse',
+    'exit /b 1'
 )
-echo Usage: delete supermouse
-exit /b 1
-"@
-Set-Content -Path "$binDir\delete.cmd" -Value $deleteCmd -Force
+$cmdLines | Out-File -FilePath "$binDir\delete.cmd" -Encoding ASCII -Force
 
-# delete_supermouse.ps1
-$deletePs1 = @"
-`$ErrorActionPreference = 'SilentlyContinue'
-Clear-Host
-Write-Host ""
-Write-Host "  =======================================================" -ForegroundColor Red
-Write-Host "             THE SUPER MOUSE — DELETION PROCESS          " -ForegroundColor White
-Write-Host "  =======================================================" -ForegroundColor Red
-Write-Host ""
-
-Write-Host "  [*] Terminating any running SuperMouse instances..." -ForegroundColor Cyan
-Stop-Process -Name "TheSuperMouse" -Force -ErrorAction SilentlyContinue
-Stop-Process -Name "SuperMouseShellServer" -Force -ErrorAction SilentlyContinue
-Get-CimInstance Win32_Process | Where-Object { (`$_.Name -eq 'pythonw.exe' -or `$_.Name -eq 'python.exe') -and `$_.CommandLine -like '*main_app.py*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force -ErrorAction SilentlyContinue }
-Start-Sleep -Seconds 1
-
-Write-Host "  [*] Restoring Windows 10/11 Default White Cursors..." -ForegroundColor Cyan
-`$cursorReg = 'HKCU:\Control Panel\Cursors'
-`$cursorNames = @('Arrow', 'Hand', 'Wait', 'IBeam', 'Help', 'AppStarting', 'No', 'NWPen', 'SizeAll', 'SizeNESW', 'SizeNS', 'SizeNWSE', 'SizeWE', 'UpArrow')
-foreach (`$cName in `$cursorNames) {
-    Remove-ItemProperty -Path `$cursorReg -Name `$cName -Force -ErrorAction SilentlyContinue
-}
-Set-ItemProperty -Path `$cursorReg -Name '(default)' -Value 'Windows Default' -Force
-Set-ItemProperty -Path `$cursorReg -Name 'Scheme Source' -Value 1 -Force
-Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Accessibility' -Name 'CursorSize' -Value 1 -Force -ErrorAction SilentlyContinue
-
-try {
-    Add-Type @"
-    using System;
-    using System.Runtime.InteropServices;
-    public class WinCursorReset {
-        [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
-        [DllImport("user32.dll")]
-        public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
-        [DllImport("user32.dll")]
-        public static extern bool SetSystemCursor(IntPtr hcur, uint id);
-    }
-"@ -ErrorAction SilentlyContinue
-    [WinCursorReset]::SystemParametersInfo(0x0057, 0, [IntPtr]::Zero, 0x01 -bor 0x02)
-    `$ocrIds = @(32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650)
-    foreach (`$cid in `$ocrIds) {
-        `$h = [WinCursorReset]::LoadCursor([IntPtr]::Zero, `$cid)
-        if (`$h -ne [IntPtr]::Zero) { [WinCursorReset]::SetSystemCursor(`$h, `$cid) }
-    }
-} catch {}
-
-Write-Host "  [*] Removing software files & desktop shortcuts..." -ForegroundColor Cyan
-`$desktop = [System.Environment]::GetFolderPath('Desktop')
-`$startup = [System.Environment]::GetFolderPath('Startup')
-Remove-Item "`$desktop\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue
-Remove-Item "`$desktop\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue
-Remove-Item "`$startup\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue
-Remove-Item "`$startup\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue
-Remove-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse" -Recurse -Force -ErrorAction SilentlyContinue
-
-# Remove PATH registration
-try {
-    `$oldPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
-    if (`$oldPath -like "*TheSuperMouse\bin*") {
-        `$newPath = (`$oldPath -split ';' | Where-Object { `$_ -and `$_ -notlike "*TheSuperMouse\bin*" }) -join ';'
-        [System.Environment]::SetEnvironmentVariable("Path", `$newPath, "User")
-    }
-} catch {}
-
-# Schedule directory self-delete
-`$batScript = "`$env:TEMP\del_supermouse.bat"
-"@echo off
-timeout /t 1 /nobreak >nul
-rmdir /s /q `"`$env:LOCALAPPDATA\TheSuperMouse`"
-del `"`%~f0`"
-" | Set-Content -Path `$batScript -Force
-Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"`$batScript`"" -WindowStyle Hidden
-
-Write-Host ""
-Write-Host "  =======================================================" -ForegroundColor Green
-Write-Host "  [+] THE SUPER MOUSE uninstalled cleanly.               " -ForegroundColor Green
-Write-Host "  [+] Windows 10/11 Default White Cursors Restored!      " -ForegroundColor Green
-Write-Host "  =======================================================" -ForegroundColor Green
-Write-Host ""
-Start-Sleep -Seconds 2
-"@
-Set-Content -Path "$binDir\delete_supermouse.ps1" -Value $deletePs1 -Force
+# delete_supermouse.ps1 (Safe line-by-line array to avoid any here-string nested parser bugs)
+$psLines = @(
+    '$ErrorActionPreference = "SilentlyContinue"',
+    'Clear-Host',
+    'Write-Host ""',
+    'Write-Host "  =======================================================" -ForegroundColor Red',
+    'Write-Host "             THE SUPER MOUSE — DELETION PROCESS          " -ForegroundColor White',
+    'Write-Host "  =======================================================" -ForegroundColor Red',
+    'Write-Host ""',
+    'Write-Host "  [*] Terminating any running SuperMouse instances..." -ForegroundColor Cyan',
+    'Stop-Process -Name "TheSuperMouse" -Force -ErrorAction SilentlyContinue',
+    'Stop-Process -Name "SuperMouseShellServer" -Force -ErrorAction SilentlyContinue',
+    'Get-CimInstance Win32_Process | Where-Object { ($_.Name -eq "pythonw.exe" -or $_.Name -eq "python.exe") -and $_.CommandLine -like "*main_app.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }',
+    'Start-Sleep -Seconds 1',
+    'Write-Host "  [*] Restoring Windows 10/11 Default White Cursors..." -ForegroundColor Cyan',
+    '$cursorReg = "HKCU:\Control Panel\Cursors"',
+    '$cursorNames = @("Arrow", "Hand", "Wait", "IBeam", "Help", "AppStarting", "No", "NWPen", "SizeAll", "SizeNESW", "SizeNS", "SizeNWSE", "SizeWE", "UpArrow")',
+    'foreach ($cName in $cursorNames) {',
+    '    Remove-ItemProperty -Path $cursorReg -Name $cName -Force -ErrorAction SilentlyContinue',
+    '}',
+    'Set-ItemProperty -Path $cursorReg -Name "(default)" -Value "Windows Default" -Force',
+    'Set-ItemProperty -Path $cursorReg -Name "Scheme Source" -Value 1 -Force',
+    'Set-ItemProperty -Path "HKCU:\Software\Microsoft\Accessibility" -Name "CursorSize" -Value 1 -Force -ErrorAction SilentlyContinue',
+    'try {',
+    '    rundll32.exe user32.dll,UpdatePerUserSystemParameters 1, True',
+    '} catch {}',
+    'Write-Host "  [*] Removing software files & desktop shortcuts..." -ForegroundColor Cyan',
+    '$desktop = [System.Environment]::GetFolderPath("Desktop")',
+    '$startup = [System.Environment]::GetFolderPath("Startup")',
+    'Remove-Item "$desktop\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue',
+    'Remove-Item "$desktop\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue',
+    'Remove-Item "$startup\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue',
+    'Remove-Item "$startup\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue',
+    'Remove-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse" -Recurse -Force -ErrorAction SilentlyContinue',
+    'try {',
+    '    $oldPath = [System.Environment]::GetEnvironmentVariable("Path", "User")',
+    '    if ($oldPath -like "*TheSuperMouse\bin*") {',
+    '        $newPath = ($oldPath -split ";" | Where-Object { $_ -and $_ -notlike "*TheSuperMouse\bin*" }) -join ";"',
+    '        [System.Environment]::SetEnvironmentVariable("Path", $newPath, "User")',
+    '    }',
+    '} catch {}',
+    '$batScript = "$env:TEMP\del_supermouse.bat"',
+    '@(',
+    '  "@echo off",',
+    '  "timeout /t 1 /nobreak >nul",',
+    '  "rmdir /s /q `"" + $env:LOCALAPPDATA + "\TheSuperMouse`"",',
+    '  "del `"%~f0`""',
+    ') | Out-File -FilePath $batScript -Encoding ASCII -Force',
+    'Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"" + $batScript + "`"" -WindowStyle Hidden',
+    'Write-Host ""',
+    'Write-Host "  =======================================================" -ForegroundColor Green',
+    'Write-Host "  [+] THE SUPER MOUSE uninstalled cleanly.               " -ForegroundColor Green',
+    'Write-Host "  [+] Windows 10/11 Default White Cursors Restored!      " -ForegroundColor Green',
+    'Write-Host "  =======================================================" -ForegroundColor Green',
+    'Write-Host ""',
+    'Start-Sleep -Seconds 2'
+)
+$psLines | Out-File -FilePath "$binDir\delete_supermouse.ps1" -Encoding UTF8 -Force
 
 # Add binDir to User PATH
 try {
