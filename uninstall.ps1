@@ -1,4 +1,4 @@
-﻿# THE SUPER MOUSE — Official Fast Clean Uninstaller
+# THE SUPER MOUSE — Official Fast Clean Uninstaller
 $ErrorActionPreference = 'SilentlyContinue'
 Clear-Host
 Write-Host ""

@@ -1,4 +1,4 @@
-﻿# THE SUPER MOUSE — 1-Command Windows Setup
+# THE SUPER MOUSE — 1-Command Windows Setup
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -76,7 +76,7 @@ if (Test-Path "$installDir\TheSuperMouse") {
 
 # 3. Download from Server with Live Progress
 $zipPath = "$env:TEMP\TheSuperMouse_Full.zip"
-$downloadUrl = "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.0/TheSuperMouse_Full.zip"
+$downloadUrl = "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.01/TheSuperMouse_Full.zip"
 
 Write-Host ""
 Write-Host "  [Step 2/2] Connecting to SuperMouse Cloud Servers..." -ForegroundColor Cyan
@@ -174,7 +174,7 @@ try {
     $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse"
     if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
     Set-ItemProperty -Path $regPath -Name "DisplayName" -Value "THE SUPER MOUSE" -Force
-    Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "1.0.0" -Force
+    Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "1.0.1" -Force
     Set-ItemProperty -Path $regPath -Name "Publisher" -Value "THE SUPERMOUSE STUDIO" -Force
     Set-ItemProperty -Path $regPath -Name "InstallLocation" -Value $workingDir -Force
     Set-ItemProperty -Path $regPath -Name "DisplayIcon" -Value "$targetExe,0" -Force
