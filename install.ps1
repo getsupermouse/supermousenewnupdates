@@ -74,47 +74,78 @@ if (Test-Path "$installDir\TheSuperMouse") {
     }
 }
 
-# 3. Download from Server with Live Progress
+# 3. Resilient Multi-Mirror Download with Live Progress
 $zipPath = "$env:TEMP\TheSuperMouse_Full.zip"
-$downloadUrl = "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.01/TheSuperMouse_Full.zip"
+$downloadCandidates = @(
+    "https://github.com/getsupermouse/supermouse-newmodes/releases/download/v1.01/TheSuperMouse_Full.zip",
+    "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.01/TheSuperMouse_Full.zip",
+    "https://github.com/getsupermouse/thesupermouse-releases/releases/download/v1.01/TheSuperMouse_Full.zip"
+)
 
 Write-Host ""
 Write-Host "  [Step 2/2] Connecting to SuperMouse Cloud Servers..." -ForegroundColor Cyan
 
-try {
-    $req = [System.Net.HttpWebRequest]::Create($downloadUrl)
-    $req.UserAgent = "SuperMouseInstaller"
-    $resp = $req.GetResponse()
-    $totalBytes = $resp.ContentLength
-    $totalMB = [Math]::Round($totalBytes / 1MB, 1)
-    $stream = $resp.GetResponseStream()
-    $fileStream = [System.IO.File]::Create($zipPath)
-    $buffer = New-Object byte[] 65536
-    $downloadedBytes = 0
-    $lastPct = -1
+$downloadSuccess = $false
+foreach ($targetUrl in $downloadCandidates) {
+    if ($downloadSuccess) { break }
+    try {
+        $req = [System.Net.HttpWebRequest]::Create($targetUrl)
+        $req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TheSuperMouseInstaller"
+        $req.Timeout = 15000
+        $req.AllowAutoRedirect = $true
+        $resp = $req.GetResponse()
+        $totalBytes = $resp.ContentLength
+        $totalMB = if ($totalBytes -gt 0) { [Math]::Round($totalBytes / 1MB, 1) } else { 115.5 }
+        $stream = $resp.GetResponseStream()
+        $fileStream = [System.IO.File]::Create($zipPath)
+        $buffer = New-Object byte[] 65536
+        $downloadedBytes = 0
+        $lastPct = -1
 
-    while (($bytesRead = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
-        $fileStream.Write($buffer, 0, $bytesRead)
-        $downloadedBytes += $bytesRead
-        $pct = [Math]::Floor(($downloadedBytes / $totalBytes) * 100)
-        if ($pct -ne $lastPct) {
-            $lastPct = $pct
-            $curMB = [Math]::Round($downloadedBytes / 1MB, 1)
-            $barLen = 25
-            $filled = [Math]::Floor(($pct / 100) * $barLen)
-            $empty = $barLen - $filled
-            $bar = ("=" * $filled) + (" " * $empty)
-            Write-Host -NoNewline "`r  [*] Downloading: [$bar] $pct% ($curMB MB / $totalMB MB)"
+        while (($bytesRead = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $fileStream.Write($buffer, 0, $bytesRead)
+            $downloadedBytes += $bytesRead
+            if ($totalBytes -gt 0) {
+                $pct = [Math]::Floor(($downloadedBytes / $totalBytes) * 100)
+                if ($pct -ne $lastPct) {
+                    $lastPct = $pct
+                    $curMB = [Math]::Round($downloadedBytes / 1MB, 1)
+                    $barLen = 25
+                    $filled = [Math]::Floor(($pct / 100) * $barLen)
+                    $empty = $barLen - $filled
+                    $bar = ("=" * $filled) + (" " * $empty)
+                    Write-Host -NoNewline "`r  [*] Downloading: [$bar] $pct% ($curMB MB / $totalMB MB)"
+                }
+            }
         }
+        $fileStream.Close()
+        $stream.Close()
+        $resp.Close()
+
+        if ((Test-Path $zipPath) -and ((Get-Item $zipPath).Length -gt 10000000)) {
+            $downloadSuccess = $true
+            Write-Host ""
+            Write-Host "  [+] Package download verified successfully!" -ForegroundColor Green
+            break
+        }
+    } catch {
+        # Fallback to Invoke-WebRequest for this candidate
+        try {
+            Write-Host "  [*] Mirror failover, trying fallback connection..." -ForegroundColor Yellow
+            Invoke-WebRequest -Uri $targetUrl -OutFile $zipPath -UserAgent "SuperMouseInstaller" -UseBasicParsing -TimeoutSec 30
+            if ((Test-Path $zipPath) -and ((Get-Item $zipPath).Length -gt 10000000)) {
+                $downloadSuccess = $true
+                Write-Host "  [+] Package download verified!" -ForegroundColor Green
+                break
+            }
+        } catch {}
     }
-    $fileStream.Close()
-    $stream.Close()
-    $resp.Close()
-    Write-Host ""
-    Write-Host "  [+] Package download verified!" -ForegroundColor Green
-} catch {
-    Write-Host "  [*] Downloading via fallback..." -ForegroundColor Cyan
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
+}
+
+if (-not $downloadSuccess) {
+    Write-Host "  [ERROR] Could not download package from any cloud mirror." -ForegroundColor Red
+    Write-Host "          Please check your internet connection or firewall." -ForegroundColor Yellow
+    exit 1
 }
 
 # 4. Extract Package Files with Progress
@@ -128,22 +159,129 @@ if (-not $preserveData -and (Test-Path $installDir)) {
 }
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 Expand-Archive -Path $zipPath -DestinationPath $installDir -Force
-Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
-# Restore user data if requested
+# Restore preserved data
 if ($preserveData -and (Test-Path $backupDir)) {
-    Get-ChildItem -Path $backupDir | ForEach-Object {
-        Copy-Item $_.FullName -Destination "$installDir\TheSuperMouse" -Force -ErrorAction SilentlyContinue
-    }
+    Write-Host "  [*] Restoring user files and configurations..." -ForegroundColor Green
+    Copy-Item -Path "$backupDir\*" -Destination "$installDir\TheSuperMouse" -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item $backupDir -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "  [+] User files and images restored!" -ForegroundColor Green
 }
 
 # Save license key
 $licPath = if (Test-Path "$installDir\TheSuperMouse") { "$installDir\TheSuperMouse\license.key" } else { "$installDir\license.key" }
 Set-Content -Path $licPath -Value $licenseKey -Force -ErrorAction SilentlyContinue
 
-# 5. Create Desktop Shortcut + Autostart
+# 5. Create CLI Tools & 'delete supermouse' in PATH
+$binDir = "$installDir\bin"
+New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+
+# delete.cmd
+$deleteCmd = @"
+@echo off
+if /I "%~1"=="supermouse" (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCALAPPDATA%\TheSuperMouse\bin\delete_supermouse.ps1"
+    exit /b %errorlevel%
+)
+echo Usage: delete supermouse
+exit /b 1
+"@
+Set-Content -Path "$binDir\delete.cmd" -Value $deleteCmd -Force
+
+# delete_supermouse.ps1
+$deletePs1 = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+Clear-Host
+Write-Host ""
+Write-Host "  =======================================================" -ForegroundColor Red
+Write-Host "             THE SUPER MOUSE — DELETION PROCESS          " -ForegroundColor White
+Write-Host "  =======================================================" -ForegroundColor Red
+Write-Host ""
+
+Write-Host "  [*] Terminating any running SuperMouse instances..." -ForegroundColor Cyan
+Stop-Process -Name "TheSuperMouse" -Force -ErrorAction SilentlyContinue
+Stop-Process -Name "SuperMouseShellServer" -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process | Where-Object { (`$_.Name -eq 'pythonw.exe' -or `$_.Name -eq 'python.exe') -and `$_.CommandLine -like '*main_app.py*' } | ForEach-Object { Stop-Process -Id `$_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 1
+
+Write-Host "  [*] Restoring Windows 10/11 Default White Cursors..." -ForegroundColor Cyan
+`$cursorReg = 'HKCU:\Control Panel\Cursors'
+`$cursorNames = @('Arrow', 'Hand', 'Wait', 'IBeam', 'Help', 'AppStarting', 'No', 'NWPen', 'SizeAll', 'SizeNESW', 'SizeNS', 'SizeNWSE', 'SizeWE', 'UpArrow')
+foreach (`$cName in `$cursorNames) {
+    Remove-ItemProperty -Path `$cursorReg -Name `$cName -Force -ErrorAction SilentlyContinue
+}
+Set-ItemProperty -Path `$cursorReg -Name '(default)' -Value 'Windows Default' -Force
+Set-ItemProperty -Path `$cursorReg -Name 'Scheme Source' -Value 1 -Force
+Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Accessibility' -Name 'CursorSize' -Value 1 -Force -ErrorAction SilentlyContinue
+
+try {
+    Add-Type @"
+    using System;
+    using System.Runtime.InteropServices;
+    public class WinCursorReset {
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+        [DllImport("user32.dll")]
+        public static extern IntPtr LoadCursor(IntPtr hInstance, int lpCursorName);
+        [DllImport("user32.dll")]
+        public static extern bool SetSystemCursor(IntPtr hcur, uint id);
+    }
+"@ -ErrorAction SilentlyContinue
+    [WinCursorReset]::SystemParametersInfo(0x0057, 0, [IntPtr]::Zero, 0x01 -bor 0x02)
+    `$ocrIds = @(32512, 32513, 32514, 32515, 32516, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650)
+    foreach (`$cid in `$ocrIds) {
+        `$h = [WinCursorReset]::LoadCursor([IntPtr]::Zero, `$cid)
+        if (`$h -ne [IntPtr]::Zero) { [WinCursorReset]::SetSystemCursor(`$h, `$cid) }
+    }
+} catch {}
+
+Write-Host "  [*] Removing software files & desktop shortcuts..." -ForegroundColor Cyan
+`$desktop = [System.Environment]::GetFolderPath('Desktop')
+`$startup = [System.Environment]::GetFolderPath('Startup')
+Remove-Item "`$desktop\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue
+Remove-Item "`$desktop\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue
+Remove-Item "`$startup\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue
+Remove-Item "`$startup\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue
+Remove-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Remove PATH registration
+try {
+    `$oldPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    if (`$oldPath -like "*TheSuperMouse\bin*") {
+        `$newPath = (`$oldPath -split ';' | Where-Object { `$_ -and `$_ -notlike "*TheSuperMouse\bin*" }) -join ';'
+        [System.Environment]::SetEnvironmentVariable("Path", `$newPath, "User")
+    }
+} catch {}
+
+# Schedule directory self-delete
+`$batScript = "`$env:TEMP\del_supermouse.bat"
+"@echo off
+timeout /t 1 /nobreak >nul
+rmdir /s /q `"`$env:LOCALAPPDATA\TheSuperMouse`"
+del `"`%~f0`"
+" | Set-Content -Path `$batScript -Force
+Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"`$batScript`"" -WindowStyle Hidden
+
+Write-Host ""
+Write-Host "  =======================================================" -ForegroundColor Green
+Write-Host "  [+] THE SUPER MOUSE uninstalled cleanly.               " -ForegroundColor Green
+Write-Host "  [+] Windows 10/11 Default White Cursors Restored!      " -ForegroundColor Green
+Write-Host "  =======================================================" -ForegroundColor Green
+Write-Host ""
+Start-Sleep -Seconds 2
+"@
+Set-Content -Path "$binDir\delete_supermouse.ps1" -Value $deletePs1 -Force
+
+# Add binDir to User PATH
+try {
+    $curPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    if ($curPath -notlike "*$binDir*") {
+        $updatedPath = "$curPath;$binDir"
+        [System.Environment]::SetEnvironmentVariable("Path", $updatedPath, "User")
+        $env:Path = "$env:Path;$binDir"
+    }
+} catch {}
+
+# 6. Create Desktop Shortcut + Autostart
 $wsh = New-Object -ComObject WScript.Shell
 $desktop = [System.Environment]::GetFolderPath('Desktop')
 $targetExe = "$installDir\TheSuperMouse\TheSuperMouse.exe"
@@ -169,7 +307,7 @@ $autoShortcut.TargetPath = $targetExe
 $autoShortcut.WorkingDirectory = $workingDir
 $autoShortcut.Save()
 
-# 6. Register in Windows 10/11 Settings -> Installed Apps
+# 7. Register in Windows 10/11 Settings -> Installed Apps
 try {
     $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse"
     if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
@@ -178,8 +316,8 @@ try {
     Set-ItemProperty -Path $regPath -Name "Publisher" -Value "THE SUPERMOUSE STUDIO" -Force
     Set-ItemProperty -Path $regPath -Name "InstallLocation" -Value $workingDir -Force
     Set-ItemProperty -Path $regPath -Name "DisplayIcon" -Value "$targetExe,0" -Force
-    Set-ItemProperty -Path $regPath -Name "UninstallString" -Value 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "irm https://getsupermouse.app/d|iex"' -Force
-    Set-ItemProperty -Path $regPath -Name "QuietUninstallString" -Value 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "irm https://getsupermouse.app/d|iex"' -Force
+    Set-ItemProperty -Path $regPath -Name "UninstallString" -Value "$binDir\delete.cmd supermouse" -Force
+    Set-ItemProperty -Path $regPath -Name "QuietUninstallString" -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$binDir\delete_supermouse.ps1`"" -Force
     Set-ItemProperty -Path $regPath -Name "EstimatedSize" -Value 280000 -Force
 } catch {}
 
