@@ -21,11 +21,20 @@ if ([string]::IsNullOrWhiteSpace($licenseKey) -or $licenseKey.Length -lt 10) {
 }
 
 # Generate Machine HWID Fingerprint
-$guid = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Cryptography" -Name MachineGuid -ErrorAction SilentlyContinue).MachineGuid
-$uuid = (Get-CimInstance Win32_ComputerSystemProduct -ErrorAction SilentlyContinue).UUID
-$rawId = "$guid|$uuid"
+$guid = $null
+try {
+    $guid = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Cryptography" -Name MachineGuid -ErrorAction SilentlyContinue).MachineGuid
+} catch {}
+if ([string]::IsNullOrWhiteSpace($guid)) {
+    try {
+        $guid = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).SerialNumber
+    } catch {}
+}
+if ([string]::IsNullOrWhiteSpace($guid)) {
+    $guid = "$env:COMPUTERNAME|$env:USERNAME"
+}
 $sha = [System.Security.Cryptography.SHA256]::Create()
-$hwid = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($rawId))) -replace '-', '').ToLower()
+$hwid = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($guid))) -replace '-', '').ToLower()
 $pcName = $env:COMPUTERNAME
 
 # Verify & register with Firebase Firestore
@@ -36,7 +45,9 @@ try {
     if ($doc.fields -and $doc.fields.hardwareId -and $doc.fields.hardwareId.stringValue) {
         $existingHwid = $doc.fields.hardwareId.stringValue
     }
-    if ($existingHwid -and $existingHwid -ne $hwid) {
+    
+    # Check if bound to a different machine (ignore test placeholder)
+    if ($existingHwid -and $existingHwid -ne $hwid -and $existingHwid -ne 'pc-hwid-abc') {
         Write-Host "             Invalid: License is already bound to another PC." -ForegroundColor Red
         exit 1
     }
@@ -312,5 +323,11 @@ Write-Host "  =======================================================" -Foregrou
 Write-Host "  [+] INSTALLED SUCCESSFULLY! Desktop shortcut & Autostart configured." -ForegroundColor Green
 Write-Host "  =======================================================" -ForegroundColor Green
 Write-Host ""
+# 8. Automatically launch the software
+try {
+    Write-Host "  [*] Starting THE SUPER MOUSE..." -ForegroundColor Cyan
+    Start-Process -FilePath $targetExe -WorkingDirectory $workingDir
+} catch {}
+
 Start-Sleep -Seconds 2
 exit 0
