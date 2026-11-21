@@ -101,8 +101,8 @@ if (Test-Path "$installDir\TheSuperMouse") {
 # 3. Resilient Multi-Mirror Download with Live Progress
 $zipPath = "$env:TEMP\TheSuperMouse_Full.zip"
 $downloadCandidates = @(
-    "https://github.com/getsupermouse/supermouse-newmodes/releases/download/v1.01/TheSuperMouse_Full.zip",
-    "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.01/TheSuperMouse_Full.zip"
+    "https://github.com/getsupermouse/supermouse-newmodes/releases/download/v1.02/TheSuperMouse_Full.zip",
+    "https://github.com/getsupermouse/supermousenewnupdates/releases/download/v1.02/TheSuperMouse_Full.zip"
 )
 
 Write-Host ""
@@ -309,7 +309,7 @@ try {
     $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse"
     if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
     Set-ItemProperty -Path $regPath -Name "DisplayName" -Value "THE SUPER MOUSE" -Force
-    Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "1.0.1" -Force
+    Set-ItemProperty -Path $regPath -Name "DisplayVersion" -Value "1.0.2" -Force
     Set-ItemProperty -Path $regPath -Name "Publisher" -Value "THE SUPERMOUSE STUDIO" -Force
     Set-ItemProperty -Path $regPath -Name "InstallLocation" -Value $workingDir -Force
     Set-ItemProperty -Path $regPath -Name "DisplayIcon" -Value "$targetExe,0" -Force
