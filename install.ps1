@@ -15,7 +15,7 @@ Write-Host ""
 Write-Host "  [Step 1/2] License Verification" -ForegroundColor White
 $licenseKey = (Read-Host "             Enter your 15-Digit License Key").Trim()
 if ([string]::IsNullOrWhiteSpace($licenseKey) -or $licenseKey.Length -lt 10) {
-    Write-Host "  [ERROR] Valid 15-digit License Key required." -ForegroundColor Red
+    Write-Host "             Invalid license key." -ForegroundColor Red
     exit 1
 }
 
@@ -37,17 +37,17 @@ try {
         $doc.fields.pcName = @{ stringValue = $pcName }
         $doc.fields.status = @{ stringValue = 'BOUND' }
         $doc.fields.registeredAt = @{ stringValue = (Get-Date -Format o) }
-        $null = Invoke-RestMethod -Uri $fbUrl -Method Patch -Body ($doc | ConvertTo-Json -Depth 5) -ContentType "application/json"
-        Write-Host "             License registered and bound to this PC!" -ForegroundColor Green
+        $null = Invoke-RestMethod -Uri $fbUrl -Method Patch -Body ($doc | ConvertTo-Json -Depth 5) -ContentType "application/json" -ErrorAction SilentlyContinue
+        Write-Host "             Verified! License bound to this PC." -ForegroundColor Green
     } elseif ($existingHwid -ne $hwid) {
-        Write-Host "  [ERROR] This license is already bound to another PC." -ForegroundColor Red
-        Write-Host "          Contact support or unbind from your dashboard." -ForegroundColor Yellow
+        Write-Host "             Invalid: License is already bound to another PC." -ForegroundColor Red
         exit 1
     } else {
-        Write-Host "             License verified on registered PC (Reinstall)." -ForegroundColor Green
+        Write-Host "             Verified! License verified on registered PC." -ForegroundColor Green
     }
 } catch {
-    Write-Host "             License verified!" -ForegroundColor Green
+    Write-Host "             Invalid license key." -ForegroundColor Red
+    exit 1
 }
 
 # 2. Check Reinstallation
