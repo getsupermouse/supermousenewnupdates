@@ -28,14 +28,32 @@ Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 # Create Desktop Shortcut
 $wsh = New-Object -ComObject WScript.Shell
 $desktop = [System.Environment]::GetFolderPath('Desktop')
-$shortcut = $wsh.CreateShortcut("$desktop\THE SUPER MOUSE.lnk")
-$shortcut.TargetPath = "$installDir\TheSuperMouse\main_app.py"
-if (-not (Test-Path $shortcut.TargetPath)) {
-    $shortcut.TargetPath = "$installDir\TheSuperMouse\TheSuperMouse.exe"
+$targetExe = "$installDir\TheSuperMouse\TheSuperMouse.exe"
+$workingDir = "$installDir\TheSuperMouse"
+if (-not (Test-Path $targetExe)) {
+    if (Test-Path "$installDir\TheSuperMouse.exe") {
+        $targetExe = "$installDir\TheSuperMouse.exe"
+        $workingDir = "$installDir"
+    } elseif (Test-Path "$installDir\TheSuperMouse\main_app.py") {
+        $targetExe = "$installDir\TheSuperMouse\main_app.py"
+        $workingDir = "$installDir\TheSuperMouse"
+    } elseif (Test-Path "$installDir\main_app.py") {
+        $targetExe = "$installDir\main_app.py"
+        $workingDir = "$installDir"
+    }
 }
-$shortcut.WorkingDirectory = "$installDir\TheSuperMouse"
+$shortcut = $wsh.CreateShortcut("$desktop\THE SUPER MOUSE.lnk")
+$shortcut.TargetPath = $targetExe
+$shortcut.WorkingDirectory = $workingDir
 $shortcut.Save()
 
-Write-Host "  [+] INSTALLED SUCCESSFULLY! Desktop shortcut created." -ForegroundColor Green
+# Windows Startup folder (autostart)
+$startup = [System.Environment]::GetFolderPath('Startup')
+$autoShortcut = $wsh.CreateShortcut("$startup\THE SUPER MOUSE.lnk")
+$autoShortcut.TargetPath = $targetExe
+$autoShortcut.WorkingDirectory = $workingDir
+$autoShortcut.Save()
+
+Write-Host "  [+] INSTALLED SUCCESSFULLY! Desktop shortcut & Autostart configured." -ForegroundColor Green
 Write-Host "  [*] Launching THE SUPER MOUSE..." -ForegroundColor Yellow
-Start-Process $shortcut.TargetPath
+Start-Process -FilePath $targetExe -WorkingDirectory $workingDir
