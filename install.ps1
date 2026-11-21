@@ -1,4 +1,4 @@
-﻿# THE SUPER MOUSE — 1-Command Windows Setup
+# THE SUPER MOUSE — 1-Command Windows Setup
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -13,7 +13,8 @@ Write-Host ""
 
 # 1. License Check Prompt
 Write-Host "  [Step 1/2] License Verification" -ForegroundColor White
-$licenseKey = (Read-Host "             Enter your 15-Digit License Key").Trim()
+$rawKey = (Read-Host "             Enter your 15-Digit License Key")
+$licenseKey = ($rawKey -replace '[^0-9a-zA-Z]', '').Trim()
 if ([string]::IsNullOrWhiteSpace($licenseKey) -or $licenseKey.Length -lt 10) {
     Write-Host "             Invalid license key." -ForegroundColor Red
     exit 1
@@ -28,23 +29,35 @@ $hwid = ([System.BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]
 $pcName = $env:COMPUTERNAME
 
 # Verify & register with Firebase Firestore
+$fbUrl = "https://firestore.googleapis.com/v1/projects/thesupermouse-a866b/databases/%28default%29/documents/licenses/$licenseKey"
 try {
-    $fbUrl = "https://firestore.googleapis.com/v1/projects/thesupermouse-a866b/databases/(default)/documents/licenses/$licenseKey"
     $doc = Invoke-RestMethod -Uri $fbUrl -Method Get -TimeoutSec 10 -ErrorAction Stop
-    $existingHwid = $doc.fields.hardwareId.stringValue
-    if ([string]::IsNullOrEmpty($existingHwid)) {
-        $doc.fields.hardwareId = @{ stringValue = $hwid }
-        $doc.fields.pcName = @{ stringValue = $pcName }
-        $doc.fields.status = @{ stringValue = 'BOUND' }
-        $doc.fields.registeredAt = @{ stringValue = (Get-Date -Format o) }
-        $null = Invoke-RestMethod -Uri $fbUrl -Method Patch -Body ($doc | ConvertTo-Json -Depth 5) -ContentType "application/json" -ErrorAction SilentlyContinue
-        Write-Host "             Verified! License bound to this PC." -ForegroundColor Green
-    } elseif ($existingHwid -ne $hwid) {
+    $existingHwid = ""
+    if ($doc.fields -and $doc.fields.hardwareId -and $doc.fields.hardwareId.stringValue) {
+        $existingHwid = $doc.fields.hardwareId.stringValue
+    }
+    if ($existingHwid -and $existingHwid -ne $hwid) {
         Write-Host "             Invalid: License is already bound to another PC." -ForegroundColor Red
         exit 1
-    } else {
-        Write-Host "             Verified! License verified on registered PC." -ForegroundColor Green
     }
+    
+    # Bind to this PC
+    try {
+        $patchBody = @{
+            fields = @{
+                key = @{ stringValue = $licenseKey }
+                hardwareId = @{ stringValue = $hwid }
+                pcName = @{ stringValue = $pcName }
+                status = @{ stringValue = "BOUND" }
+                registeredAt = @{ stringValue = (Get-Date -Format o) }
+            }
+        } | ConvertTo-Json -Depth 5
+        $patchUrl = $fbUrl + "?updateMask.fieldPaths=key&updateMask.fieldPaths=hardwareId&updateMask.fieldPaths=pcName&updateMask.fieldPaths=status&updateMask.fieldPaths=registeredAt"
+        $null = Invoke-RestMethod -Uri $patchUrl -Method Patch -Body $patchBody -ContentType "application/json" -ErrorAction SilentlyContinue
+    } catch {}
+
+    Write-Host "             Verified! License found in database: $licenseKey" -ForegroundColor Green
+    Write-Host "             Bound to this PC. Continuing setup..." -ForegroundColor Green
 } catch {
     Write-Host "             Invalid license key." -ForegroundColor Red
     exit 1
