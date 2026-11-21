@@ -119,11 +119,15 @@ try {
 
 # 4. Extract Package Files with Progress
 Write-Host "  [*] Extracting and installing package files to $installDir..." -ForegroundColor Cyan
+Stop-Process -Name "TheSuperMouse" -Force -ErrorAction SilentlyContinue
+Stop-Process -Name "SuperMouseShellServer" -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
+
 if (-not $preserveData -and (Test-Path $installDir)) {
     Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-[System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $installDir, $true)
+Expand-Archive -Path $zipPath -DestinationPath $installDir -Force
 Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
 # Restore user data if requested

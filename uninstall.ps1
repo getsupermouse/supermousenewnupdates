@@ -26,6 +26,12 @@ Remove-Item "$desktop\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue
 Remove-Item "$startup\THE SUPER MOUSE.lnk" -Force -ErrorAction SilentlyContinue
 Remove-Item "$startup\TheSuperMouse.lnk" -Force -ErrorAction SilentlyContinue
 
+Write-Host "  [*] Restoring Windows 10/11 default cursors..." -ForegroundColor Cyan
+Remove-ItemProperty -Path 'HKCU:\Control Panel\Cursors' -Name 'Arrow', 'Hand', 'Wait', 'IBeam', 'Help', 'AppStarting', 'No', 'NWPen', 'SizeAll', 'SizeNESW', 'SizeNS', 'SizeNWSE', 'SizeWE', 'UpArrow' -Force -ErrorAction SilentlyContinue
+Set-ItemProperty -Path 'HKCU:\Control Panel\Cursors' -Name '(default)' -Value 'Windows Default' -Force
+Set-ItemProperty -Path 'HKCU:\Control Panel\Cursors' -Name 'Scheme Source' -Value 1 -Force
+rundll32.exe user32.dll,UpdatePerUserSystemParameters
+
 Write-Host "  [*] Cleaning Windows Settings registration & cache..." -ForegroundColor Cyan
 Remove-Item "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\TheSuperMouse" -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$env:TEMP\TheSuperMouse*" -Recurse -Force -ErrorAction SilentlyContinue
@@ -35,6 +41,7 @@ Write-Host ""
 Write-Host "  =======================================================" -ForegroundColor Green
 Write-Host "  [+] THE SUPER MOUSE has been completely and cleanly    " -ForegroundColor Green
 Write-Host "      uninstalled from this PC.                          " -ForegroundColor Green
+Write-Host "  [+] Windows 10/11 Default Cursors Restored!            " -ForegroundColor Green
 Write-Host "  =======================================================" -ForegroundColor Green
 Write-Host ""
 Start-Sleep -Seconds 2
